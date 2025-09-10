@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Simple Pong — Single/Multiplayer</title>
+  <style>
+    :root{--bg:#0b1220;--accent:#7efc8d;--muted:#aab3c0}
+    html,body{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Arial;overflow:hidden}
+    body{display:flex;justify-content:center;align-items:center;background:var(--bg);}
+    .wrap{width:100vw;height:100vh;position:relative;display:flex;justify-content:center;align-items:center;}
+    canvas{background:#071427;border-radius:8px;width:100%;height:100%;object-fit:contain;}
+
+    /* Touch buttons hugging corners */
+    .touch-controls{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;}
+    .side-group{position:absolute;display:flex;flex-direction:column;gap:16px;pointer-events:auto;}
+    .side-group.left{left:0;bottom:0;}
+    .side-group.right{right:0;bottom:0;}
+    .touch-btn{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:var(--accent);padding:28px 32px;border-radius:18px;font-size:28px;user-select:none;text-align:center;min-width:80px;}
+    .touch-btn:active{background:rgba(126,252,141,0.3);}
+    .pause-btn{position:absolute;top:10px;right:10px;pointer-events:auto;}
+
+    /* Password modal styles */
+    #passwordModal {
+      position: fixed;
+      inset: 0;
+      background: rgba(11,18,32,0.96);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+    }
+    #passwordBox {
+      background: #101a2b;
+      border-radius: 18px;
+      box-shadow: 0 2px 16px #0005;
+      padding: 40px 32px 32px 32px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    #passwordBox h2 {color: var(--accent); margin-top:0; margin-bottom:18px;}
+    #passwordInput {
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid var(--muted);
+      font-size: 20px;
+      margin-bottom: 18px;
+      outline: none;
+      width: 220px;
+      background: #0b1220;
+      color: var(--accent);
+      letter-spacing: 0.1em;
+    }
+    #submitPassword {
+      padding: 10px 32px;
+      font-size: 20px;
+      background: var(--accent);
+      color: #0b1220;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    #submitPassword:active {
+      background: #56c773;
+    }
+    #errorMsg {
+      color: #ff4444;
+      margin-top: 10px;
+      font-size: 16px;
+      min-height: 22px;
+    }
+  </style>
+</head>
+<body>
+  <div id="passwordModal">
+    <div id="passwordBox">
+      <h2>Enter Password</h2>
+      <input type="password" id="passwordInput" placeholder="Password" autocomplete="off" />
+      <button id="submitPassword">Enter</button>
+      <div id="errorMsg"></div>
+    </div>
+  </div>
+  <div class="wrap" style="filter: blur(8px); pointer-events:none;" id="mainContent">
+    <canvas id="game" width="800" height="500"></canvas>
+
+    <div class="touch-controls">
+      <div class="side-group left" id="leftControls">
+        <div class="touch-btn" id="leftUp">▲</div>
+        <div class="touch-btn" id="leftDown">▼</div>
+      </div>
+      <div class="side-group right" id="rightControls">
+        <div class="touch-btn" id="rightUp">▲</div>
+        <div class="touch-btn" id="rightDown">▼</div>
+      </div>
+      <div class="pause-btn">
+        <div class="touch-btn" id="pauseBtn">⏯ Pause</div>
+      </div>
+    </div>
+  </div>
+  <script>
+    // === Password menu logic ===
+    const CORRECT_PASSWORD = 'iambored'; // Change this to your preferred password
+
+    const passwordModal = document.getElementById('passwordModal');
+    const passwordInput = document.getElementById('passwordInput');
+    const submitPassword = document.getElementById('submitPassword');
+    const errorMsg = document.getElementById('errorMsg');
+    const mainContent = document.getElementById('mainContent');
+
+    function unlockSite() {
+      passwordModal.style.display = 'none';
+      mainContent.style.filter = '';
+      mainContent.style.pointerEvents = '';
+    }
+    function checkPassword() {
+      if (passwordInput.value === CORRECT_PASSWORD) {
+        unlockSite();
+      } else {
+        errorMsg.textContent = 'Incorrect password. Please try again.';
+        passwordInput.value = '';
+        passwordInput.focus();
+      }
+    }
+    submitPassword.addEventListener('click', checkPassword);
+    passwordInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') checkPassword();
+    });
+    passwordInput.focus();
+
+    // === Pong Game Logic (unchanged) ===
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    let W = canvas.width, H = canvas.height;
+    const paddle = {w:10,h:100,speed:6};
+    const left = {x:20,y:(H-100)/2,score:0};
+    const right = {x:W-30,y:(H-100)/2,score:0};
+    const ball = {x:W/2,y:H/2,r:8,speed:5,velX:5,velY:3};
+    let singlePlayer=true, paused=false, winningScore=10;
+    const keys = {};
+
+    window.addEventListener('keydown', e=>{keys[e.key.toLowerCase()]=true;if(e.code==='Space') togglePause(); if(e.key.toLowerCase()==='m') toggleMode();});
+    window.addEventListener('keyup', e=>{keys[e.key.toLowerCase()]=false});
+
+    function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+
+    function handleTouch(e){
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      for(const touch of e.touches){
+        const x = touch.clientX - rect.left;
+        const y = touch.clientY - rect.top;
+        if(x<W/2){left.y = clamp(y-paddle.h/2,0,H-paddle.h);} else {right.y=clamp(y-paddle.h/2,0,H-paddle.h);}
+      }
+    }
+    canvas.addEventListener('touchstart', handleTouch);
+    canvas.addEventListener('touchmove', handleTouch);
+
+    function aiMove(){const center=right.y+paddle.h/2; const diff=ball.y-center; right.y=clamp(right.y+diff*0.12+Math.sign(diff)*0.3,0,H-paddle.h);}
+
+    function update(){
+      if(paused) return;
+      if(keys['w']) left.y-=paddle.speed;
+      if(keys['s']) left.y+=paddle.speed;
+      left.y=clamp(left.y,0,H-paddle.h);
+      if(!singlePlayer){if(keys['arrowup']) right.y-=paddle.speed; if(keys['arrowdown']) right.y+=paddle.speed; right.y=clamp(right.y,0,H-paddle.h);} else {aiMove();}
+      ball.x+=ball.velX; ball.y+=ball.velY;
+      if(ball.y-ball.r<=0||ball.y+ball.r>=H) ball.velY*=-1;
+      if(ball.x-ball.r<=left.x+paddle.w && ball.y>=left.y && ball.y<=left.y+paddle.h){
+        ball.x=left.x+paddle.w+ball.r; const hit=(ball.y-(left.y+paddle.h/2))/(paddle.h/2); ball.velX=5*Math.cos(hit*Math.PI/3); ball.velY=5*Math.sin(hit*Math.PI/3);
+      }
+      if(ball.x+ball.r>=right.x && ball.y>=right.y && ball.y<=right.y+paddle.h){
+        ball.x=right.x-ball.r; const hit=(ball.y-(right.y+paddle.h/2))/(paddle.h/2); ball.velX=-5*Math.cos(hit*Math.PI/3); ball.velY=5*Math.sin(hit*Math.PI/3);
+      }
+      if(ball.x+ball.r<0){resetBall(true);}
+      if(ball.x-ball.r>W){resetBall(false);}
+    }
+
+    function resetBall(servingToRight=true){ball.x=W/2; ball.y=H/2; ball.velX=(servingToRight?1:-1)*5; ball.velY=(Math.random()*2-1)*3;}
+
+    function render(){
+      ctx.clearRect(0,0,W,H);
+      ctx.fillStyle='#071427'; ctx.fillRect(0,0,W,H);
+      ctx.fillStyle='#7efc8d'; ctx.fillRect(left.x,left.y,paddle.w,paddle.h); ctx.fillRect(right.x,right.y,paddle.w,paddle.h);
+      ctx.beginPath(); ctx.arc(ball.x,ball.y,ball.r,0,Math.PI*2); ctx.fill();
+    }
+
+    function loop(){update(); render(); requestAnimationFrame(loop);}
+    loop();
+
+    // Make canvas landscape responsive
+    function resizeCanvas(){
+      const ratio = 800/500;
+      let width = window.innerWidth; let height = window.innerHeight;
+      if(width/height>ratio){width=height*ratio;} else {height=width/ratio;}
+      canvas.style.width=width+'px'; canvas.style.height=height+'px'; W=width; H=height;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+  </script>
+</body>
+</html>
