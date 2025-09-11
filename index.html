@@ -10,8 +10,6 @@
     body{display:flex;justify-content:center;align-items:center;background:var(--bg);}
     .wrap{width:100vw;height:100vh;position:relative;display:flex;justify-content:center;align-items:center;}
     canvas{background:#071427;border-radius:8px;width:100%;height:100%;object-fit:contain;}
-
-    /* Touch buttons hugging corners */
     .touch-controls{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;}
     .side-group{position:absolute;display:flex;flex-direction:column;gap:16px;pointer-events:auto;}
     .side-group.left{left:0;bottom:0;}
@@ -19,12 +17,28 @@
     .touch-btn{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:var(--accent);padding:28px 32px;border-radius:18px;font-size:28px;user-select:none;text-align:center;min-width:80px;}
     .touch-btn:active{background:rgba(126,252,141,0.3);}
     .pause-btn{position:absolute;top:10px;right:10px;pointer-events:auto;}
+    .password-overlay {
+      position:fixed;z-index:99;top:0;left:0;width:100vw;height:100vh;
+      background:rgba(11,18,32,0.98);display:flex;justify-content:center;align-items:center;
+    }
+    .password-box {
+      background:#071427;padding:32px 40px;border-radius:20px;box-shadow:0 2px 10px #0003;
+      display:flex;flex-direction:column;align-items:center;gap:16px;
+    }
+    .password-box input {
+      padding:12px 18px;border-radius:8px;border:1px solid var(--muted);font-size:20px;color:#fff;background:#0b1220;
+      outline:none;
+    }
+    .password-box button {
+      margin-top:8px;padding:10px 26px;border-radius:8px;border:none;font-size:20px;background:var(--accent);color:#071427;cursor:pointer;transition:background 0.2s;
+    }
+    .password-box button:hover {background:#5de675;}
+    .password-box .error {color:#fa6d6d;font-size:17px;}
   </style>
 </head>
 <body>
-  <div class="wrap">
+  <div class="wrap" id="gameWrap" style="display:none;">
     <canvas id="game" width="800" height="500"></canvas>
-
     <div class="touch-controls">
       <div class="side-group left" id="leftControls">
         <div class="touch-btn" id="leftUp">▲</div>
@@ -39,75 +53,110 @@
       </div>
     </div>
   </div>
+  <div class="password-overlay" id="pwOverlay">
+    <form class="password-box" id="pwForm" autocomplete="off">
+      <div style="font-size:26px;color:var(--accent);font-weight:500;">Enter Password</div>
+      <input type="password" id="pwInput" placeholder="Password" required autofocus />
+      <button type="submit">Unlock</button>
+      <div class="error" id="pwError" style="display:none;">Incorrect password, try again.</div>
+    </form>
+  </div>
   <script>
-    const canvas = document.getElementById('game');
-    const ctx = canvas.getContext('2d');
-    let W = canvas.width, H = canvas.height;
-    const paddle = {w:10,h:100,speed:6};
-    const left = {x:20,y:(H-100)/2,score:0};
-    const right = {x:W-30,y:(H-100)/2,score:0};
-    const ball = {x:W/2,y:H/2,r:8,speed:5,velX:5,velY:3};
-    let singlePlayer=true, paused=false, winningScore=10;
-    const keys = {};
-
-    window.addEventListener('keydown', e=>{keys[e.key.toLowerCase()]=true;if(e.code==='Space') togglePause(); if(e.key.toLowerCase()==='m') toggleMode();});
-    window.addEventListener('keyup', e=>{keys[e.key.toLowerCase()]=false});
-
-    function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
-
-    function handleTouch(e){
+    // Password protection logic
+    const PASSWORD = "pong2025"; // CHANGE THIS TO YOUR PASSWORD!
+    const overlay = document.getElementById('pwOverlay');
+    const form = document.getElementById('pwForm');
+    const input = document.getElementById('pwInput');
+    const error = document.getElementById('pwError');
+    const gameWrap = document.getElementById('gameWrap');
+    form.addEventListener('submit', function(e){
       e.preventDefault();
-      const rect = canvas.getBoundingClientRect();
-      for(const touch of e.touches){
-        const x = touch.clientX - rect.left;
-        const y = touch.clientY - rect.top;
-        if(x<W/2){left.y = clamp(y-paddle.h/2,0,H-paddle.h);} else {right.y=clamp(y-paddle.h/2,0,H-paddle.h);}
+      if(input.value === PASSWORD){
+        overlay.style.display = 'none';
+        gameWrap.style.display = 'flex';
+        setTimeout(initGame, 100); // allow UI update before running game
+      }else{
+        error.style.display = 'block';
+        input.value = '';
+        input.focus();
       }
-    }
-    canvas.addEventListener('touchstart', handleTouch);
-    canvas.addEventListener('touchmove', handleTouch);
-
-    function aiMove(){const center=right.y+paddle.h/2; const diff=ball.y-center; right.y=clamp(right.y+diff*0.12+Math.sign(diff)*0.3,0,H-paddle.h);}
-
-    function update(){
-      if(paused) return;
-      if(keys['w']) left.y-=paddle.speed;
-      if(keys['s']) left.y+=paddle.speed;
-      left.y=clamp(left.y,0,H-paddle.h);
-      if(!singlePlayer){if(keys['arrowup']) right.y-=paddle.speed; if(keys['arrowdown']) right.y+=paddle.speed; right.y=clamp(right.y,0,H-paddle.h);} else {aiMove();}
-      ball.x+=ball.velX; ball.y+=ball.velY;
-      if(ball.y-ball.r<=0||ball.y+ball.r>=H) ball.velY*=-1;
-      if(ball.x-ball.r<=left.x+paddle.w && ball.y>=left.y && ball.y<=left.y+paddle.h){
-        ball.x=left.x+paddle.w+ball.r; const hit=(ball.y-(left.y+paddle.h/2))/(paddle.h/2); ball.velX=5*Math.cos(hit*Math.PI/3); ball.velY=5*Math.sin(hit*Math.PI/3);
+    });
+    function initGame(){
+      const canvas = document.getElementById('game');
+      const ctx = canvas.getContext('2d');
+      let W = canvas.width, H = canvas.height;
+      const paddle = {w:10,h:100,speed:6};
+      const left = {x:20,y:(H-100)/2,score:0};
+      const right = {x:W-30,y:(H-100)/2,score:0};
+      const ball = {x:W/2,y:H/2,r:8,speed:5,velX:5,velY:3};
+      let singlePlayer=true, paused=false, winningScore=10;
+      const keys = {};
+      window.addEventListener('keydown', e=>{keys[e.key.toLowerCase()]=true;if(e.code==='Space') togglePause(); if(e.key.toLowerCase()==='m') toggleMode();});
+      window.addEventListener('keyup', e=>{keys[e.key.toLowerCase()]=false});
+      function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+      function handleTouch(e){
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        for(const touch of e.touches){
+          const x = touch.clientX - rect.left;
+          const y = touch.clientY - rect.top;
+          if(x<W/2){left.y = clamp(y-paddle.h/2,0,H-paddle.h);} else {right.y=clamp(y-paddle.h/2,0,H-paddle.h);}
+        }
       }
-      if(ball.x+ball.r>=right.x && ball.y>=right.y && ball.y<=right.y+paddle.h){
-        ball.x=right.x-ball.r; const hit=(ball.y-(right.y+paddle.h/2))/(paddle.h/2); ball.velX=-5*Math.cos(hit*Math.PI/3); ball.velY=5*Math.sin(hit*Math.PI/3);
+      canvas.addEventListener('touchstart', handleTouch);
+      canvas.addEventListener('touchmove', handleTouch);
+      function aiMove(){const center=right.y+paddle.h/2; const diff=ball.y-center; right.y=clamp(right.y+diff*0.12+Math.sign(diff)*0.3,0,H-paddle.h);}
+      function update(){
+        if(paused) return;
+        if(keys['w']) left.y-=paddle.speed;
+        if(keys['s']) left.y+=paddle.speed;
+        left.y=clamp(left.y,0,H-paddle.h);
+        if(!singlePlayer){if(keys['arrowup']) right.y-=paddle.speed; if(keys['arrowdown']) right.y+=paddle.speed; right.y=clamp(right.y,0,H-paddle.h);} else {aiMove();}
+        ball.x+=ball.velX; ball.y+=ball.velY;
+        if(ball.y-ball.r<=0||ball.y+ball.r>=H) ball.velY*=-1;
+        if(ball.x-ball.r<=left.x+paddle.w && ball.y>=left.y && ball.y<=left.y+paddle.h){
+          ball.x=left.x+paddle.w+ball.r; const hit=(ball.y-(left.y+paddle.h/2))/(paddle.h/2); ball.velX=5*Math.cos(hit*Math.PI/3); ball.velY=5*Math.sin(hit*Math.PI/3);
+        }
+        if(ball.x+ball.r>=right.x && ball.y>=right.y && ball.y<=right.y+paddle.h){
+          ball.x=right.x-ball.r; const hit=(ball.y-(right.y+paddle.h/2))/(paddle.h/2); ball.velX=-5*Math.cos(hit*Math.PI/3); ball.velY=5*Math.sin(hit*Math.PI/3);
+        }
+        if(ball.x+ball.r<0){resetBall(true);}
+        if(ball.x-ball.r>W){resetBall(false);}
       }
-      if(ball.x+ball.r<0){resetBall(true);}
-      if(ball.x-ball.r>W){resetBall(false);}
+      function resetBall(servingToRight=true){ball.x=W/2; ball.y=H/2; ball.velX=(servingToRight?1:-1)*5; ball.velY=(Math.random()*2-1)*3;}
+      function render(){
+        ctx.clearRect(0,0,W,H);
+        ctx.fillStyle='#071427'; ctx.fillRect(0,0,W,H);
+        ctx.fillStyle='#7efc8d'; ctx.fillRect(left.x,left.y,paddle.w,paddle.h); ctx.fillRect(right.x,right.y,paddle.w,paddle.h);
+        ctx.beginPath(); ctx.arc(ball.x,ball.y,ball.r,0,Math.PI*2); ctx.fill();
+      }
+      function loop(){update(); render(); requestAnimationFrame(loop);}
+      loop();
+      function resizeCanvas(){
+        const ratio = 800/500;
+        let width = window.innerWidth; let height = window.innerHeight;
+        if(width/height>ratio){width=height*ratio;} else {height=width/ratio;}
+        canvas.style.width=width+'px'; canvas.style.height=height+'px'; W=width; H=height;
+      }
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+      // Add touch buttons logic (if you want the on-screen controls to work)
+      document.getElementById('leftUp').ontouchstart = ()=>{keys['w']=true;};
+      document.getElementById('leftUp').ontouchend = ()=>{keys['w']=false;};
+      document.getElementById('leftDown').ontouchstart = ()=>{keys['s']=true;};
+      document.getElementById('leftDown').ontouchend = ()=>{keys['s']=false;};
+      document.getElementById('rightUp').ontouchstart = ()=>{keys['arrowup']=true;};
+      document.getElementById('rightUp').ontouchend = ()=>{keys['arrowup']=false;};
+      document.getElementById('rightDown').ontouchstart = ()=>{keys['arrowdown']=true;};
+      document.getElementById('rightDown').ontouchend = ()=>{keys['arrowdown']=false;};
+      document.getElementById('pauseBtn').onclick = ()=>{paused=!paused;};
+      function togglePause(){paused=!paused;}
+      function toggleMode(){singlePlayer=!singlePlayer;}
     }
-
-    function resetBall(servingToRight=true){ball.x=W/2; ball.y=H/2; ball.velX=(servingToRight?1:-1)*5; ball.velY=(Math.random()*2-1)*3;}
-
-    function render(){
-      ctx.clearRect(0,0,W,H);
-      ctx.fillStyle='#071427'; ctx.fillRect(0,0,W,H);
-      ctx.fillStyle='#7efc8d'; ctx.fillRect(left.x,left.y,paddle.w,paddle.h); ctx.fillRect(right.x,right.y,paddle.w,paddle.h);
-      ctx.beginPath(); ctx.arc(ball.x,ball.y,ball.r,0,Math.PI*2); ctx.fill();
-    }
-
-    function loop(){update(); render(); requestAnimationFrame(loop);}
-    loop();
-
-    // Make canvas landscape responsive
-    function resizeCanvas(){
-      const ratio = 800/500;
-      let width = window.innerWidth; let height = window.innerHeight;
-      if(width/height>ratio){width=height*ratio;} else {height=width/ratio;}
-      canvas.style.width=width+'px'; canvas.style.height=height+'px'; W=width; H=height;
-    }
-    window.addEventListener('resize', resizeCanvas);
-    resizeCanvas();
+    // Optionally, allow pressing Enter to focus input again after wrong password
+    input.addEventListener('keydown', function(e){
+      if(e.key==='Enter') setTimeout(()=>input.select(),10);
+    });
   </script>
 </body>
 </html>
