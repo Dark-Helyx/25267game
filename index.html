@@ -19,71 +19,10 @@
     .touch-btn{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.2);color:var(--accent);padding:28px 32px;border-radius:18px;font-size:28px;user-select:none;text-align:center;min-width:80px;}
     .touch-btn:active{background:rgba(126,252,141,0.3);}
     .pause-btn{position:absolute;top:10px;right:10px;pointer-events:auto;}
-
-    /* Password modal styles */
-    #passwordModal {
-      position: fixed;
-      inset: 0;
-      background: rgba(11,18,32,0.96);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 999;
-    }
-    #passwordBox {
-      background: #101a2b;
-      border-radius: 18px;
-      box-shadow: 0 2px 16px #0005;
-      padding: 40px 32px 32px 32px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-    #passwordBox h2 {color: var(--accent); margin-top:0; margin-bottom:18px;}
-    #passwordInput {
-      padding: 12px;
-      border-radius: 8px;
-      border: 1px solid var(--muted);
-      font-size: 20px;
-      margin-bottom: 18px;
-      outline: none;
-      width: 220px;
-      background: #0b1220;
-      color: var(--accent);
-      letter-spacing: 0.1em;
-    }
-    #submitPassword {
-      padding: 10px 32px;
-      font-size: 20px;
-      background: var(--accent);
-      color: #0b1220;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      font-weight: bold;
-    }
-    #submitPassword:active {
-      background: #56c773;
-    }
-    #errorMsg {
-      color: #ff4444;
-      margin-top: 10px;
-      font-size: 16px;
-      min-height: 22px;
-    }
   </style>
 </head>
 <body>
-  <div id="passwordModal">
-    <div id="passwordBox">
-      <h2>Enter Password</h2>
-      <input type="password" id="passwordInput" placeholder="Password" autocomplete="off" />
-      <button id="submitPassword">Enter</button>
-      <div id="errorMsg"></div>
-    </div>
-  </div>
-  <div class="wrap" style="filter: blur(8px); pointer-events:none;" id="mainContent">
+  <div class="wrap">
     <canvas id="game" width="800" height="500"></canvas>
 
     <div class="touch-controls">
@@ -101,36 +40,6 @@
     </div>
   </div>
   <script>
-    // === Password menu logic ===
-    const CORRECT_PASSWORD = 'iambored'; // Change this to your preferred password
-
-    const passwordModal = document.getElementById('passwordModal');
-    const passwordInput = document.getElementById('passwordInput');
-    const submitPassword = document.getElementById('submitPassword');
-    const errorMsg = document.getElementById('errorMsg');
-    const mainContent = document.getElementById('mainContent');
-
-    function unlockSite() {
-      passwordModal.style.display = 'none';
-      mainContent.style.filter = '';
-      mainContent.style.pointerEvents = '';
-    }
-    function checkPassword() {
-      if (passwordInput.value === CORRECT_PASSWORD) {
-        unlockSite();
-      } else {
-        errorMsg.textContent = 'Incorrect password. Please try again.';
-        passwordInput.value = '';
-        passwordInput.focus();
-      }
-    }
-    submitPassword.addEventListener('click', checkPassword);
-    passwordInput.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') checkPassword();
-    });
-    passwordInput.focus();
-
-    // === Pong Game Logic (unchanged) ===
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
     let W = canvas.width, H = canvas.height;
